@@ -1,0 +1,80 @@
+# Copyright 2023 You-Sheng Yang and others
+# SPDX-License-Identifier: Apache-2.0
+---
+name: 'CI'
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*'
+    paths-ignore:
+      - LICENSE
+      - 'README.*'
+  pull_request:
+    paths-ignore:
+      - LICENSE
+      - 'README.*'
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: 'Install prerequisites'
+        run: |
+          sudo apt-get update --quiet
+          sudo apt-get install --no-install-recommends -y \
+              licensecheck
+
+      - name: 'Check license'
+        run: |
+          PROBLEMS=0
+
+          BAD_FILES=$(licensecheck -r . | grep -Ev '(README.md)'| grep UNKNOWN) || true
+          if [ -n "${BAD_FILES}" ]; then
+            echo "ERROR: Missing license statement in the following files:"
+            echo "$BAD_FILES"
+            PROBLEMS=$(($PROBLEMS + 1))
+          fi
+
+          exit $PROBLEMS
+
+      - name: 'reviewdog/shellcheck'
+        uses: haya14busa/action-cond@v1
+        id: reporter
+        with:
+          cond: ${{ github.event_name == 'pull_request' }}
+          if_true: "github-pr-review"
+          if_false: "github-check"
+      - uses: reviewdog/action-shellcheck@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: ${{ steps.reporter.outputs.value }}
+          level: warning
+          exclude: |
+            */.git/*
+
+  test-top-action:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: 'debian'
+            image_args: 'sh -c env'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - id: top-action
+        uses: ./
+        env:
+          MYENV_FROM_STEPS: 'steps'
+        with:
+          docker_args: ${{ matrix.docker_args || '' }}
+          include_env_match: '^MYENV_'
+          image: ${{ matrix.image }}
+          image_args: ${{ matrix.image_args || '' }}
