@@ -14,10 +14,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+[ $# -ge 1 ] || { echo "Insufficient argument." >&2; exit 1; }
+image="$1"; shift
+
 INPUT_DOCKER_ARGS="${INPUT_DOCKER_ARGS:-}"
 INPUT_INCLUDE_ENV_MATCH="${INPUT_INCLUDE_ENV_MATCH:-}"
-INPUT_IMAGE="${INPUT_IMAGE:-}"
-INPUT_IMAGE_ARGS="${INPUT_IMAGE_ARGS:-}"
+INPUT_IMAGE_CMDS="${INPUT_IMAGE_CMDS:-}"
 
 while IFS='=' read -r -d '' name value; do
   case "${name}" in
@@ -41,11 +43,11 @@ echo "::group::docker run arguments"
 echo "${docker_run_args[@]}"
 echo "::endgroup::"
 
-echo "::group::image arguments"
-echo "${*} ${INPUT_IMAGE_ARGS}"
+echo "::group::image commands"
+echo "${*} ${INPUT_IMAGE_CMDS}"
 echo "::endgroup::"
 
 # shellcheck disable=SC2086
 exec docker run "${docker_run_args[@]}" ${INPUT_DOCKER_ARGS} \
-    "${INPUT_IMAGE}" \
-    "$@" ${INPUT_IMAGE_ARGS}
+    "${image}" \
+    "$@" ${INPUT_IMAGE_CMDS}

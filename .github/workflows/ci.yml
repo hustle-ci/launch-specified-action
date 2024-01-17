@@ -98,7 +98,7 @@ jobs:
       matrix:
         include:
           - image: 'debian'
-            image_args: 'sh -c env'
+            image_cmds: 'sh -c env'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,7 +127,7 @@ jobs:
           docker_args: ${{ matrix.docker_args || '' }}
           include_env_match: '^MYENV_'
           image: ${{ matrix.image }}
-          image_args: ${{ matrix.image_args || '' }}
+          image_cmds: ${{ matrix.image_cmds || '' }}
 
   publish-image:
     runs-on: ubuntu-latest
