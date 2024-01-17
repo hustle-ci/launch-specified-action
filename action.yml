@@ -29,6 +29,6 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'Dockerfile'
+  image: 'ghcr.io/hustle-ci/launcher:latest'
   args:
     - '/start.sh'
