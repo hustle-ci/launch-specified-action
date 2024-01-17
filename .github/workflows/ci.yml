@@ -56,8 +56,44 @@ jobs:
           exclude: |
             */.git/*
 
+  build-image:
+    runs-on: ubuntu-latest
+    needs:
+      - static-checks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/launcher
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v0.') && 'false' || 'true' }}
+            type=raw,value=latest
+      - name: Build and export
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          outputs: type=docker,dest=/tmp/launcher-image.tar
+
+      - name: Upload artifact
+        # Don't use v4 unless https://github.com/actions/download-artifact/issues/249 solved.
+        uses: actions/upload-artifact@v3
+        with:
+          name: launcher-image
+          path: /tmp/launcher-image.tar
+
   test-top-action:
     runs-on: ubuntu-latest
+    needs:
+      - build-image
     strategy:
       matrix:
         include:
@@ -66,8 +102,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download artifact
+        # Don't use v4 unless https://github.com/actions/download-artifact/issues/249 solved.
+        uses: actions/download-artifact@v3
+        with:
+          name: launcher-image
+          path: /tmp
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+      - name: Load image
+        run: |
+          docker load --input /tmp/launcher-image.tar
+          echo "::group::built image"
+          docker image ls -a
+          echo "::endgroup::"
 
       - id: top-action
         uses: ./
@@ -78,3 +128,34 @@ jobs:
           include_env_match: '^MYENV_'
           image: ${{ matrix.image }}
           image_args: ${{ matrix.image_args || '' }}
+
+  publish-image:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    needs:
+      - test-top-action
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download artifact
+        # Don't use v4 unless https://github.com/actions/download-artifact/issues/249 solved.
+        uses: actions/download-artifact@v3
+        with:
+          name: launcher-image
+          path: /tmp
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Load image
+        run: |
+          docker load --input /tmp/launcher-image.tar
+          echo "::group::built image"
+          docker image ls -a
+          echo "::endgroup::"
+      - name: Push image
+        run: |
+          docker push --all-tags ghcr.io/${{ github.repository_owner }}/launcher
